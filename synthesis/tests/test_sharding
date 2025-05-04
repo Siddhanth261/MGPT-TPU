@@ -1,0 +1,7 @@
+import jax.numpy as jnp
+from synthesis.synthesis_core.sharding import shard_batch
+
+def test_shard_batch():
+    x = jnp.arange(32).reshape(16, 2)
+    out = shard_batch(x, n_devices=4)
+    assert out.shape == (4, 4, 2)
