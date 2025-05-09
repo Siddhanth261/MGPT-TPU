@@ -9,5 +9,6 @@ class TrainConfig:
 
 def train(cfg, init_fn, loss_fn, batch_fn, rng):
     params = init_fn(rng)
-    # pmap-wrapped train_step to be added in later commits
+    grad_fn = jax.value_and_grad(loss_fn)
+
     return params
