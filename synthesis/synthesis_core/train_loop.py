@@ -1,17 +1,87 @@
 from dataclasses import dataclass
+from typing import Any, Callable, Dict
+
 import jax
+import jax.numpy as jnp
+
+from .devices import get_tpu_mesh
+from .sharding import shard_batch
+from .optimizers import adamw, AdamWConfig
+from .logging import JsonLogger
+from .checkpoints import save_ckpt
+
+
 @dataclass
 class TrainConfig:
     steps: int
     global_batch: int
     lr: float
     log_every: int = 50
+    ckpt_path: str = "checkpoints/ckpt.pkl"
 
-def train(cfg, init_fn, loss_fn, batch_fn, rng):
-    params = init_fn(rng)
-    grad_fn = jax.value_and_grad(loss_fn)
-    loss = jax.lax.pmean(loss, axis_name="d")
-    grads = jax.lax.pmean(grads, axis_name="d")
-    p_train_step = jax.pmap(train_step, axis_name="d")
 
-    return params
+def train(cfg: TrainConfig,
+          init_fn: Callable,
+          loss_fn: Callable,
+          batch_fn: Callable,
+          rng):
+
+    mesh = get_tpu_mesh()
+    n_devices = mesh.n_devices
+
+    assert cfg.global_batch % n_devices == 0, \
+        "Global batch must be divisible by number of devices."
+
+    # Init model
+    rng, init_rng = jax.random.split(rng)
+    params = init_fn(init_rng)
+
+    # Setup optimizer
+    opt_init, opt_update = adamw(AdamWConfig(lr=cfg.lr))
+    opt_state = opt_init(params)
+
+    # Prepare logger
+    logger = JsonLogger("logs/train.jsonl")
+
+    # Define train step
+    def train_step(params, opt_state, batch, rng):
+        def loss_wrap(p, b, key):
+            return loss_fn(p, b, key)
+
+        grad_fn = jax.value_and_grad(loss_wrap)
+        loss, grads = grad_fn(params, batch, rng)
+
+        # Aggregate across devices
+        loss = jax.lax.pmean(loss, axis_name="dev")
+        grads = jax.lax.pmean(grads, axis_name="dev")
+
+        new_params, new_state = opt_update(grads, opt_state, params)
+        return new_params, new_state, loss
+
+    # pmap train_step
+    p_train_step = jax.pmap(train_step, axis_name="dev")
+
+    # Replicate params & optimizer
+    params = jax.device_put_replicated(params, mesh.devices)
+    opt_state = jax.device_put_replicated(opt_state, mesh.devices)
+
+    # Training loop
+    for step in range(cfg.steps):
+        rng, step_rng = jax.random.split(rng)
+        step_rngs = jax.random.split(step_rng, num=n_devices)
+
+        batch_global = batch_fn(step)
+        batch = {k: shard_batch(v, n_devices) for k, v in batch_global.items()}
+
+        params, opt_state, loss = p_train_step(params, opt_state, batch, step_rngs)
+        loss_scalar = float(loss[0])
+
+        if step % cfg.log_every == 0:
+            logger.log({"step": step, "loss": loss_scalar})
+
+    # Save checkpoint
+    host_params = jax.tree.map(lambda x: x[0], params)
+    host_opt = jax.tree.map(lambda x: x[0], opt_state)
+    save_ckpt(cfg.ckpt_path, {"params": host_params, "opt_state": host_opt})
+
+    return host_params
