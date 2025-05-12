@@ -1,5 +1,7 @@
 import jax
 import jax.numpy as jnp
+print("Devices:", jax.devices())
+
 
 from synthesis.synthesis_core.train_loop import train, TrainConfig
 from synthesis.synthesis_core.sharding import shard_batch
