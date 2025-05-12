@@ -1,3 +1,7 @@
+import os
+os.makedirs("logs", exist_ok=True)
+os.makedirs("checkpoints", exist_ok=True)
+
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
