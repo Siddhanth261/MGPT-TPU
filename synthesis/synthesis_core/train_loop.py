@@ -58,6 +58,7 @@ def train(cfg: TrainConfig,
         # Aggregate across devices
         loss = jax.lax.pmean(loss, axis_name="dev")
         grads = jax.lax.pmean(grads, axis_name="dev")
+        print(f"step {step} loss: {loss_scalar}")
 
         new_params, new_state = opt_update(grads, opt_state, params)
         return new_params, new_state, loss
