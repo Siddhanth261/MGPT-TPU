@@ -1,6 +1,7 @@
 import os
 os.makedirs("logs", exist_ok=True)
 os.makedirs("checkpoints", exist_ok=True)
+from synthesis.synthesis_core.schedules import linear_warmup
 
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
@@ -83,6 +84,8 @@ def train(cfg: TrainConfig,
         batch_global = batch_fn(step)
         batch = {k: shard_batch(v, n_devices) for k, v in batch_global.items()}
 
+        lr = linear_warmup(step, warmup_steps=50, base_lr=cfg.lr)
+        cfg.lr = lr
         params, opt_state, loss = p_train_step(params, opt_state, batch, step_rngs)
         loss_scalar = float(loss[0])
 
