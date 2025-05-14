@@ -63,6 +63,11 @@ def train(cfg: TrainConfig,
         new_params, new_state = opt_update(grads, opt_state, params)
         return new_params, new_state, loss
 
+    max_norm = 1.0
+    g_norm = jnp.sqrt(sum([jnp.sum(g**2) for g in jax.tree.leaves(grads)]))
+    scale = jnp.minimum(1.0, max_norm / (g_norm + 1e-6))
+    grads = jax.tree.map(lambda g: g * scale, grads)
+
     # pmap train_step
     p_train_step = jax.pmap(train_step, axis_name="dev")
 
