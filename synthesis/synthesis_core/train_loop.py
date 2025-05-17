@@ -1,4 +1,7 @@
 import os
+import time
+start_time = time.time()
+
 os.makedirs("logs", exist_ok=True)
 os.makedirs("checkpoints", exist_ok=True)
 from synthesis.synthesis_core.schedules import linear_warmup
@@ -88,6 +91,11 @@ def train(cfg: TrainConfig,
         cfg.lr = lr
         params, opt_state, loss = p_train_step(params, opt_state, batch, step_rngs)
         loss_scalar = float(loss[0])
+        
+        elapsed = time.time() - start_time
+        steps_left = cfg.steps - step
+        eta = (elapsed / (step + 1e-9)) * steps_left
+        print(f"ETA: {eta:.2f}s remaining")
 
         if step % cfg.log_every == 0:
             logger.log({"step": step, "loss": loss_scalar})
@@ -98,3 +106,4 @@ def train(cfg: TrainConfig,
     save_ckpt(cfg.ckpt_path, {"params": host_params, "opt_state": host_opt})
 
     return host_params
+
