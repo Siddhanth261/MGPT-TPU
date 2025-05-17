@@ -1,3 +1,8 @@
+import shutil
+
+if os.path.exists("logs/train.jsonl"):
+    shutil.move("logs/train.jsonl", f"logs/train_old_{int(time.time())}.jsonl")
+
 import os
 import time
 start_time = time.time()
