@@ -1,6 +1,9 @@
 import jax
 import jax.numpy as jnp
 print("Devices:", jax.devices())
+from synthesis.synthesis_core.param_utils import count_params
+print("Parameter count:", count_params(params))
+
 
 
 from synthesis.synthesis_core.train_loop import train, TrainConfig
